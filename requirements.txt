@@ -7,3 +7,6 @@ matplotlib
 pytest
 jupyter
 seaborn
+pandas-ta
+pynance
+vaderSentiment
