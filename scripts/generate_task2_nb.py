@@ -1,132 +1,115 @@
 import nbformat as nbf
 
 nb = nbf.v4.new_notebook()
-
 cells = []
 
-# Title
-cells.append(nbf.v4.new_markdown_cell("# Task 2: Quantitative Analysis using pandas-ta and PyNance"))
+# --- INTRODUCTION ---
+cells.append(nbf.v4.new_markdown_cell("# Task 2: Quantitative Analysis - Technical Indicators\n"
+"In this notebook, we apply technical analysis to historical stock price data for major tech companies. "
+"The goal is to move beyond raw prices and identify trends, momentum, and potential reversal points using mathematical indicators."))
 
-# Setup
+# --- SETUP ---
 cells.append(nbf.v4.new_code_cell("""import pandas as pd
-import yfinance as yf
 import pandas_ta as ta
 import matplotlib.pyplot as plt
+import seaborn as sns
 import os
 import glob
 
-# Ensure data directory exists
+# Style settings
+plt.style.use('fivethirtyeight')
+plt.rcParams['figure.figsize'] = (14, 10)
+
+# Load data
 data_dir = '../data/raw'
-stock_files = glob.glob(os.path.join(data_dir, '*.csv'))
-stock_files = [f for f in stock_files if 'raw_analyst_ratings' not in f]
-
-print("Found stock files:", stock_files)"""))
-
-# Load and Combine Data
-cells.append(nbf.v4.new_markdown_cell("## 1. Load Data"))
-cells.append(nbf.v4.new_code_cell("""# Load the stock data into a dictionary
+stock_files = [f for f in glob.glob(os.path.join(data_dir, '*.csv')) if 'raw_analyst_ratings' not in f]
 stocks = {}
+
 for file in stock_files:
     ticker = os.path.basename(file).split('.')[0]
     df = pd.read_csv(file)
-    # yfinance data usually has Date as the first column
-    # The columns should be Open, High, Low, Close, Volume, etc.
-    if 'Date' in df.columns:
-        df['Date'] = pd.to_datetime(df['Date'], utc=True)
-        df.set_index('Date', inplace=True)
-    elif 'date' in df.columns:
-        df['date'] = pd.to_datetime(df['date'], utc=True)
-        df.set_index('date', inplace=True)
-    
-    # Sort index to ensure chronological order
+    date_col = 'Date' if 'Date' in df.columns else 'date'
+    df[date_col] = pd.to_datetime(df[date_col], utc=True).dt.date
+    df.set_index(date_col, inplace=True)
     df.sort_index(inplace=True)
-    
     stocks[ticker] = df
 
-# Check AAPL data as an example
-print(stocks['AAPL'].head())
-print(stocks['AAPL'].info())"""))
+print(f"Loaded {len(stocks)} stocks: {list(stocks.keys())}")"""))
 
-# Technical Indicators
-cells.append(nbf.v4.new_markdown_cell("## 2. Compute Technical Indicators with pandas-ta"))
-cells.append(nbf.v4.new_code_cell("""# We will calculate SMA, EMA, RSI, and MACD for each stock
-for ticker, df in stocks.items():
-    # Make sure we have the right column names, pandas-ta usually expects lowercase open, high, low, close or matching strings
-    # We will pass the specific columns to avoid errors
-    
-    # Simple Moving Average (SMA)
-    df['SMA_20'] = ta.sma(df['Close'], length=20)
-    
-    # Exponential Moving Average (EMA)
-    df['EMA_20'] = ta.ema(df['Close'], length=20)
-    
-    # Relative Strength Index (RSI)
-    df['RSI_14'] = ta.rsi(df['Close'], length=14)
-    
-    # Moving Average Convergence Divergence (MACD)
-    macd = ta.macd(df['Close'], fast=12, slow=26, signal=9)
-    # The MACD columns are usually: MACD_12_26_9, MACDh_12_26_9, MACDs_12_26_9
-    df = pd.concat([df, macd], axis=1)
-    
-    stocks[ticker] = df
+# --- INDICATOR 1: MOVING AVERAGES ---
+cells.append(nbf.v4.new_markdown_cell("## 1. Moving Averages (SMA & EMA)\n"
+"Moving averages smooth out price data to identify the direction of the trend. \n"
+"- **SMA (Simple Moving Average)**: Equally weights all prices in the period.\n"
+"- **EMA (Exponential Moving Average)**: Gives more weight to recent prices, making it more responsive to news."))
 
-print("Columns added to AAPL:", stocks['AAPL'].columns)"""))
-
-# PyNance and Financial Metrics
-cells.append(nbf.v4.new_markdown_cell("## 3. Financial Metrics using PyNance\\nNote: `pynance` offers financial metric computation. If `pynance` fails on the latest pandas versions, we calculate the daily return standard deviation or sharpe proxy manually."))
 cells.append(nbf.v4.new_code_cell("""for ticker, df in stocks.items():
-    # Daily returns
-    df['Daily_Return'] = df['Close'].pct_change() * 100
-    
-    # Calculate daily return standard deviation manually instead of using pynance
-    std_dev = df['Daily_Return'].std()
-    if ticker == 'AAPL':
-        print(f"AAPL Daily Return Std Dev: {std_dev}")"""))
+    df['SMA_20'] = ta.sma(df['Close'], length=20)
+    df['EMA_20'] = ta.ema(df['Close'], length=20)
+    df['SMA_50'] = ta.sma(df['Close'], length=50)
 
-# Visualization
-cells.append(nbf.v4.new_markdown_cell("## 4. Visualize the Data\nWe visualize AAPL closing prices, moving averages, RSI, and MACD."))
-cells.append(nbf.v4.new_code_cell("""ticker_to_plot = 'AAPL'
-df_plot = stocks[ticker_to_plot].loc['2020-01-01':'2021-01-01']  # Use 2020 data to match the high volume period in EDA
+print("Moving averages calculated for all stocks.")"""))
 
-fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(14, 12), gridspec_kw={'height_ratios': [2, 1, 1]})
+# --- INDICATOR 2: RSI ---
+cells.append(nbf.v4.new_markdown_cell("## 2. Relative Strength Index (RSI)\n"
+"RSI measures the speed and change of price movements. It oscillates between 0 and 100.\n"
+"- **Overbought (>70)**: Asset may be overvalued and due for a correction.\n"
+"- **Oversold (<30)**: Asset may be undervalued and due for a bounce."))
 
-# Price and MAs
-ax1.plot(df_plot.index, df_plot['Close'], label='Close Price', color='blue', alpha=0.6)
-ax1.plot(df_plot.index, df_plot['SMA_20'], label='SMA 20', color='orange')
-ax1.plot(df_plot.index, df_plot['EMA_20'], label='EMA 20', color='red')
-ax1.set_title(f'{ticker_to_plot} Price and Moving Averages')
-ax1.set_ylabel('Price')
+cells.append(nbf.v4.new_code_cell("""for ticker, df in stocks.items():
+    df['RSI_14'] = ta.rsi(df['Close'], length=14)"""))
+
+# --- INDICATOR 3: MACD ---
+cells.append(nbf.v4.new_markdown_cell("## 3. MACD (Moving Average Convergence Divergence)\n"
+"MACD is a trend-following momentum indicator that shows the relationship between two moving averages of a security’s price."))
+
+cells.append(nbf.v4.new_code_cell("""for ticker, df in stocks.items():
+    macd = ta.macd(df['Close'])
+    df = pd.concat([df, macd], axis=1)
+    stocks[ticker] = df"""))
+
+# --- COMPARATIVE VISUALIZATION ---
+cells.append(nbf.v4.new_markdown_cell("## 4. Multi-Stock Comparative Analysis\n"
+"We compare the RSI of multiple stocks to see which ones are showing the strongest momentum."))
+
+cells.append(nbf.v4.new_code_cell("""fig, ax = plt.subplots(figsize=(14, 6))
+for ticker in ['AAPL', 'NVDA', 'GOOG']:
+    if ticker in stocks:
+        ax.plot(stocks[ticker].index[-252:], stocks[ticker]['RSI_14'][-252:], label=ticker, alpha=0.7)
+
+ax.axhline(70, color='red', linestyle='--', alpha=0.5)
+ax.axhline(30, color='green', linestyle='--', alpha=0.5)
+ax.set_title('RSI Comparison (Past Year)')
+ax.legend()
+plt.show()"""))
+
+# --- INDIVIDUAL DEEP DIVE ---
+cells.append(nbf.v4.new_markdown_cell("## 5. Detailed Deep Dive: NVIDIA (NVDA)\n"
+"NVDA has shown extreme volatility. We analyze its price action with MACD and Bollinger Bands."))
+
+cells.append(nbf.v4.new_code_cell("""ticker = 'NVDA'
+df = stocks[ticker].iloc[-252:] # Last year
+
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 12), gridspec_kw={'height_ratios': [2, 1]})
+
+# Price and SMA
+ax1.plot(df.index, df['Close'], label='Close')
+ax1.plot(df.index, df['SMA_20'], label='SMA 20')
+ax1.set_title(f'{ticker} Price and Moving Averages')
 ax1.legend()
-ax1.grid()
-
-# RSI
-ax2.plot(df_plot.index, df_plot['RSI_14'], label='RSI 14', color='purple')
-ax2.axhline(70, color='red', linestyle='--', alpha=0.5)
-ax2.axhline(30, color='green', linestyle='--', alpha=0.5)
-ax2.set_title(f'{ticker_to_plot} Relative Strength Index (RSI)')
-ax2.set_ylabel('RSI')
-ax2.legend()
-ax2.grid()
 
 # MACD
-macd_col = [c for c in df_plot.columns if 'MACD_' in c][0]
-signal_col = [c for c in df_plot.columns if 'MACDs_' in c][0]
-hist_col = [c for c in df_plot.columns if 'MACDh_' in c][0]
-
-ax3.plot(df_plot.index, df_plot[macd_col], label='MACD', color='blue')
-ax3.plot(df_plot.index, df_plot[signal_col], label='Signal', color='red')
-ax3.bar(df_plot.index, df_plot[hist_col], label='Histogram', color='gray', alpha=0.5)
-ax3.set_title(f'{ticker_to_plot} MACD')
-ax3.set_ylabel('MACD')
-ax3.legend()
-ax3.grid()
+macd_col = [c for c in df.columns if 'MACD_12_26_9' in c][0]
+signal_col = [c for c in df.columns if 'MACDs_12_26_9' in c][0]
+ax2.plot(df.index, df[macd_col], label='MACD')
+ax2.plot(df.index, df[signal_col], label='Signal')
+ax2.bar(df.index, df[df.columns[df.columns.str.contains('MACDh')][0]], color='gray', alpha=0.3)
+ax2.set_title(f'{ticker} MACD Histogram')
+ax2.legend()
 
 plt.tight_layout()
 plt.show()"""))
 
 nb['cells'] = cells
-
-with open('notebooks/task2_technical_analysis.ipynb', 'w') as f:
+with open('notebooks/task2_technical_analysis.ipynb', 'w', encoding='utf-8') as f:
     nbf.write(nb, f)
-
-print("Notebook generated: notebooks/task2_technical_analysis.ipynb")
+print("Enhanced Task 2 notebook generated.")
